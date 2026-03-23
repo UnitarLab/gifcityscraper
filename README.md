@@ -11,6 +11,3 @@ Retro-styled vintage animated GIF collector for the GeoCities Archive (via [GifC
 
 ## Deployment
 Optimized for Vercel. Simply push to GitHub and connect yours.
-
----
-*Created with Antigravity*
