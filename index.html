@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GifCities Scraper</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #0f0f1a;
+    --card: #13131f;
+    --border: #2a2a45;
+    --border-bright: #4a4a80;
+    --accent: #7b5ea7;
+    --accent2: #4fc3f7;
+    --accent3: #f06292;
+    --text: #e0e0f0;
+    --text-dim: #7070a0;
+    --text-bright: #ffffff;
+    --green: #69ff85;
+    --amber: #ffd54f;
+    --red: #ff5370;
+    --tag-off: #1a1a2e;
+    --tag-on-bg: #2a1a4a;
+    --tag-on-border: #7b5ea7;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Share Tech Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.08) 2px, rgba(0,0,0,.08) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* animated bg grid */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(123,94,167,.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(123,94,167,.06) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridMove 20s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  @keyframes gridMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  .shell {
+    position: relative;
+    z-index: 1;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* ── Header ── */
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .logo {
+    font-family: 'VT323', monospace;
+    font-size: 64px;
+    line-height: 1;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, #f06292, #7b5ea7, #4fc3f7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: hueShift 6s ease-in-out infinite alternate;
+  }
+
+  @keyframes hueShift {
+    0%   { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(30deg); }
+  }
+
+  .tagline {
+    font-size: 12px;
+    color: var(--text-dim);
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .panel-head .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    flex-shrink: 0;
+  }
+
+  .panel-head .arrow {
+    margin-left: auto;
+    transition: transform .2s;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .panel-head.collapsed .arrow { transform: rotate(-90deg); }
+
+  .panel-body { padding: 16px; }
+  .panel-body.hidden { display: none; }
+
+  /* ── Category label ── */
+  .cat-label {
+    font-size: 10px;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 14px 0 6px;
+  }
+  .cat-label:first-child { margin-top: 0; }
+
+  /* ── Tags ── */
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .tag {
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: var(--tag-off);
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .12s;
+    user-select: none;
+  }
+
+  .tag:hover { border-color: var(--border-bright); color: var(--text); }
+
+  .tag.on {
+    background: var(--tag-on-bg);
+    border-color: var(--accent);
+    color: var(--accent2);
+    box-shadow: 0 0 8px rgba(123,94,167,.3);
+  }
+
+  .tag-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  /* ── Controls row ── */
+  .controls-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 160px;
+  }
+
+  label {
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  input[type=text], select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+    width: 100%;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  input[type=text]:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(123,94,167,.2);
+  }
+
+  select option { background: #1a1a2e; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 9px 20px;
+    border-radius: 2px;
+    border: 1px solid var(--border-bright);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: rgba(255,255,255,.05); border-color: var(--text-dim); }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  .btn-primary {
+    border-color: var(--accent);
+    color: var(--accent2);
+    background: rgba(123,94,167,.1);
+  }
+  .btn-primary:hover { background: rgba(123,94,167,.25); }
+
+  .btn-danger {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .btn-danger:hover { background: rgba(255,83,112,.1); }
+
+  .btn-success {
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .btn-success:hover { background: rgba(105,255,133,.1); }
+
+  .btn-zip {
+    border-color: var(--accent3);
+    color: var(--accent3);
+    font-weight: 500;
+  }
+  .btn-zip:hover { background: rgba(240,98,146,.1); }
+
+  .btn-sm { padding: 5px 12px; font-size: 11px; }
+
+  /* ── Stats bar ── */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 1.25rem;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+  }
+
+  .stat-card .n {
+    font-family: 'VT323', monospace;
+    font-size: 32px;
+    line-height: 1;
+    color: var(--text-bright);
+  }
+
+  .stat-card .n.green { color: var(--green); text-shadow: 0 0 10px rgba(105,255,133,.4); }
+  .stat-card .n.amber { color: var(--amber); }
+  .stat-card .n.accent { color: var(--accent2); }
+
+  .stat-card .l {
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+
+  /* ── Progress ── */
+  .progress-wrap { margin-bottom: 1.25rem; }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+
+  .progress-track {
+    height: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    transition: width .4s;
+    box-shadow: 0 0 8px rgba(123,94,167,.5);
+  }
+
+  /* ── Log ── */
+  .log-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 36px;
+    margin-bottom: 1.25rem;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .log-box .ok   { color: var(--green); }
+  .log-box .err  { color: var(--red); }
+  .log-box .info { color: var(--accent2); }
+
+  /* ── Results ── */
+  .results-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--text-dim);
+    max-height: 260px;
+    overflow-y: auto;
+    line-height: 1.8;
+    word-break: break-all;
+    margin-bottom: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-bright) var(--surface);
+  }
+
+  .results-area a {
+    color: var(--accent2);
+    text-decoration: none;
+  }
+  .results-area a:hover { text-decoration: underline; }
+
+  .results-area .term-header {
+    color: var(--accent);
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    margin: 8px 0 3px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .results-area .term-header:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
+  /* ── Export row ── */
+  .export-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    margin-top: 3rem;
+    font-size: 11px;
+    color: var(--border-bright);
+    letter-spacing: .1em;
+  }
+
+  /* ── Blink cursor ── */
+  .blink { animation: blink .8s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── Count pill ── */
+  .pill {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 10px;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <header>
+    <div class="logo">GifCities Scraper</div>
+    <div class="tagline">vintage animated gif url collector · geocities archive</div>
+  </header>
+
+  <!-- ── Terms panel ── -->
+  <div class="panel">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="dot"></span>
+      Search terms
+      <span id="selected-count" class="pill">0</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="panel-body" id="terms-panel">
+
+      <div class="cat-label">⚡ Elements</div>
+      <div class="tags" id="cat-elements"></div>
+
+      <div class="cat-label">🐾 Animals</div>
+      <div class="tags" id="cat-animals"></div>
+
+      <div class="cat-label">🌿 Plants</div>
+      <div class="tags" id="cat-plants"></div>
+
+      <div class="cat-label">🏔 Landscapes</div>
+      <div class="tags" id="cat-landscapes"></div>
+
+      <div class="cat-label">✦ Classic forum decor</div>
+      <div class="tags" id="cat-forum"></div>
+
+      <div class="cat-label">＋ Custom</div>
+      <div class="tags" id="cat-custom"></div>
+
+      <div class="tag-actions">
+        <button class="btn btn-sm" onclick="selectAll()">Select all</button>
+        <button class="btn btn-sm" onclick="selectNone()">Deselect all</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Options panel ── -->
+  <div class="panel">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="dot" style="background:var(--accent2);box-shadow:0 0 6px var(--accent2)"></span>
+      Options
+      <span class="arrow">▼</span>
+    </div>
+    <div class="panel-body">
+      <div class="controls-row">
+        <div class="field-group">
+          <label>GIFs per term</label>
+          <select id="per-term">
+            <option value="10" selected>10 per term</option>
+            <option value="25">25 per term</option>
+            <option value="50">50 per term</option>
+            <option value="100">100 per term</option>
+            <option value="200">200 per term</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Delay between requests (ms)</label>
+          <select id="delay">
+            <option value="500">500ms — fast</option>
+            <option value="1000" selected>1000ms — normal</option>
+            <option value="2000">2000ms — polite</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Add custom term</label>
+          <div style="display:flex;gap:6px">
+            <input type="text" id="custom-input" placeholder="e.g. rainbow, ninja..." onkeydown="if(event.key==='Enter')addCustom()" style="flex:1"/>
+            <button class="btn btn-sm" onclick="addCustom()">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stats ── -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="n accent" id="s-terms">0</div>
+      <div class="l">terms selected</div>
+    </div>
+    <div class="stat-card">
+      <div class="n green" id="s-found">0</div>
+      <div class="l">URLs found</div>
+    </div>
+    <div class="stat-card">
+      <div class="n amber" id="s-progress">0/0</div>
+      <div class="l">terms done</div>
+    </div>
+    <div class="stat-card">
+      <div class="n" id="s-dupes">0</div>
+      <div class="l">duplicates skipped</div>
+    </div>
+  </div>
+
+  <!-- ── Progress ── -->
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span id="prog-label">Idle<span class="blink">_</span></span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="prog-fill"></div>
+    </div>
+  </div>
+
+  <!-- ── Log ── -->
+  <div class="log-box" id="log"><span class="info">Ready. Select terms and click Run.</span></div>
+
+  <!-- ── Run controls ── -->
+  <div style="display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap">
+    <button class="btn btn-primary" id="run-btn" onclick="runAll()">▶ Run collection</button>
+    <button class="btn btn-danger" id="stop-btn" onclick="stopRun()" disabled>■ Stop</button>
+    <button class="btn" onclick="clearAll()">✕ Clear results</button>
+  </div>
+
+  <!-- ── Results ── -->
+  <div class="panel">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="dot" style="background:var(--green);box-shadow:0 0 6px var(--green)"></span>
+      Results
+      <span id="result-count" class="pill">0</span>
+      <span class="arrow">▼</span>
+    </div>
+    <div class="panel-body">
+      <div class="results-area" id="results-area">
+        <span style="color:var(--text-dim);font-size:11px">URLs will appear here as they are fetched...</span>
+      </div>
+      <div class="export-row">
+        <button class="btn btn-success" onclick="downloadTXT()">↓ Download .txt</button>
+        <button class="btn btn-success" onclick="downloadCSV()">↓ Download .csv</button>
+        <button class="btn btn-zip" id="zip-btn" onclick="downloadZip()">⬇ Save all GIFs as .zip</button>
+        <button class="btn" onclick="copyAll()">⎘ Copy all URLs</button>
+        <button class="btn" onclick="previewGallery()">◈ Preview gallery</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Gallery preview ── -->
+  <div class="panel" id="gallery-panel" style="display:none">
+    <div class="panel-head" onclick="togglePanel(this)">
+      <span class="dot" style="background:var(--accent3);box-shadow:0 0 6px var(--accent3)"></span>
+      Gallery preview (first 60 GIFs)
+      <span class="arrow">▼</span>
+    </div>
+    <div class="panel-body">
+      <div id="gallery" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-start"></div>
+    </div>
+  </div>
+
+  <!-- ── Zip progress modal ── -->
+  <div id="zip-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border:1px solid var(--border-bright);border-radius:6px;padding:2rem;width:420px;max-width:92vw;">
+      <div style="font-family:'VT323',monospace;font-size:28px;color:var(--accent2);margin-bottom:6px;">Downloading GIFs</div>
+      <div style="font-size:11px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:1.25rem;">fetching via cors proxy · packing into zip</div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:5px;">
+        <span id="zip-label">Starting...</span>
+        <span id="zip-pct">0%</span>
+      </div>
+      <div style="height:6px;background:var(--surface);border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-bottom:1rem;">
+        <div id="zip-fill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent3),var(--accent2));border-radius:3px;transition:width .3s;box-shadow:0 0 8px rgba(240,98,146,.5);"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-family:'Share Tech Mono',monospace;">
+        <span style="color:var(--text-dim)">✓ <span id="zip-done">0</span> done &nbsp; ✕ <span id="zip-fail">0</span> failed</span>
+        <span style="color:var(--text-dim)">of <span id="zip-total">0</span> GIFs</span>
+      </div>
+      <div id="zip-current" style="margin-top:10px;font-size:10px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;word-break:break-all;min-height:14px;"></div>
+      <button class="btn btn-danger btn-sm" id="zip-cancel-btn" onclick="cancelZip()" style="margin-top:1.25rem;">✕ Cancel</button>
+    </div>
+  </div>
+
+  <footer>double-click gifcities_scraper.html to run · no install needed · geocities archive via archive.org</footer>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const CATEGORIES = {
+  elements:   ["fire","water","earth","lightning","ice","wind","flame","wave","storm","crystal","lava","rain","snow","thunder","fog","aurora","comet","sun","moon","star"],
+  animals:    ["cat","dragon","eagle","wolf","butterfly","horse","lion","tiger","fox","owl","shark","dolphin","frog","bat","unicorn","phoenix","snake","bear","deer","fish"],
+  plants:     ["tree","flower","rose","mushroom","leaves","forest","cactus","vine","sunflower","lotus","bamboo","fern","ivy","willow","oak","bonsai","grass","lily","jungle","cherry blossom"],
+  landscapes: ["mountain","ocean","waterfall","desert","cave","island","beach","river","glacier","canyon","valley","ruins","castle","lighthouse","bridge","garden","cliff","swamp","forest path","volcano"],
+  forum:      ["spinning star","divider","crown","skull","shield","gem","sword","heart","globe","banner","wings","arrow","potion","scroll","hourglass","sparkle","rainbow bar","under construction","new","click here"],
+};
+
+let selected = new Set();
+let allUrls = [];
+let urlsByTerm = {};
+let running = false;
+let shouldStop = false;
+let dupeCount = 0;
+let seenUrls = new Set();
+let customTerms = [];
+
+function buildTags() {
+  for (const [cat, terms] of Object.entries(CATEGORIES)) {
+    const idMap = { elements:'cat-elements', animals:'cat-animals', plants:'cat-plants', landscapes:'cat-landscapes', forum:'cat-forum' };
+    const container = document.getElementById(idMap[cat]);
+    if (!container) continue;
+    container.innerHTML = '';
+    terms.forEach(t => {
+      const el = document.createElement('span');
+      el.className = 'tag' + (selected.has(t) ? ' on' : '');
+      el.textContent = t;
+      el.dataset.term = t;
+      el.onclick = () => toggleTag(t);
+      container.appendChild(el);
+    });
+  }
+  refreshCustomTags();
+  updateStats();
+}
+
+function refreshCustomTags() {
+  const c = document.getElementById('cat-custom');
+  c.innerHTML = '';
+  customTerms.forEach(t => {
+    const el = document.createElement('span');
+    el.className = 'tag' + (selected.has(t) ? ' on' : '');
+    el.textContent = t + ' ×';
+    el.dataset.term = t;
+    el.onclick = (e) => {
+      if (e.target.textContent.includes('×') && !selected.has(t)) {
+        customTerms = customTerms.filter(x => x !== t);
+        selected.delete(t);
+        refreshCustomTags();
+        updateStats();
+      } else {
+        toggleTag(t);
+      }
+    };
+    c.appendChild(el);
+  });
+}
+
+function toggleTag(t) {
+  selected.has(t) ? selected.delete(t) : selected.add(t);
+  buildTags();
+}
+
+function selectAll() {
+  Object.values(CATEGORIES).flat().forEach(t => selected.add(t));
+  customTerms.forEach(t => selected.add(t));
+  buildTags();
+}
+
+function selectNone() {
+  selected.clear();
+  buildTags();
+}
+
+function addCustom() {
+  const v = document.getElementById('custom-input').value.trim().toLowerCase();
+  if (!v) return;
+  if (!customTerms.includes(v)) customTerms.push(v);
+  selected.add(v);
+  document.getElementById('custom-input').value = '';
+  buildTags();
+}
+
+function togglePanel(head) {
+  head.classList.toggle('collapsed');
+  const body = head.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+function updateStats() {
+  document.getElementById('s-terms').textContent = selected.size;
+  document.getElementById('s-found').textContent = allUrls.length;
+  document.getElementById('s-dupes').textContent = dupeCount;
+  document.getElementById('result-count').textContent = allUrls.length;
+  document.getElementById('selected-count').textContent = selected.size;
+}
+
+function setLog(html) {
+  document.getElementById('log').innerHTML = html;
+}
+
+function setProg(done, total, label) {
+  const pct = total ? Math.round((done/total)*100) : 0;
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-pct').textContent = pct + '%';
+  document.getElementById('prog-label').innerHTML = label + '<span class="blink">_</span>';
+  document.getElementById('s-progress').textContent = `${done}/${total}`;
+}
+
+const PROXIES = [
+  { name: 'allorigins', fn: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+  { name: 'corsproxy.io', fn: url => `https://corsproxy.io/?${encodeURIComponent(url)}` },
+  { name: 'codetabs', fn: url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}` },
+];
+
+let workingProxy = null;
+
+async function fetchWithProxy(targetUrl) {
+  // Try last known working proxy first
+  if (workingProxy !== null) {
+    try {
+      const r = await fetch(PROXIES[workingProxy].fn(targetUrl), { signal: AbortSignal.timeout(10000) });
+      if (r.ok) return await r.text();
+    } catch(e) { workingProxy = null; }
+  }
+  // Try all proxies
+  for (let i = 0; i < PROXIES.length; i++) {
+    try {
+      const r = await fetch(PROXIES[i].fn(targetUrl), { signal: AbortSignal.timeout(10000) });
+      if (r.ok) { workingProxy = i; return await r.text(); }
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+async function fetchGifs(term, pageSize) {
+  const targetUrl = `https://gifcities.org/search?q=${encodeURIComponent(term)}&offset=0&page_size=${pageSize}`;
+  const text = await fetchWithProxy(targetUrl);
+  if (!text) return [];
+
+  // Try JSON parse
+  try {
+    const data = JSON.parse(text);
+    const results = data.results || data.gifs || data.items || [];
+    const urls = [];
+    for (const item of results) {
+      for (const field of ['url','gif_url','image_url','src']) {
+        if (item[field] && item[field].includes('blob.gifcities.org')) {
+          urls.push(item[field]); break;
+        }
+      }
+      for (const field of ['id','hash','key','filename']) {
+        if (item[field]) {
+          const u = `https://blob.gifcities.org/gifcities/${item[field]}`;
+          const full = u.endsWith('.gif') ? u : u + '.gif';
+          if (!urls.includes(full)) { urls.push(full); break; }
+        }
+      }
+    }
+    if (urls.length > 0) return urls.slice(0, pageSize);
+  } catch(e) {}
+
+  // Fallback: regex scrape from HTML/JSON string
+  const matches = [...text.matchAll(/https:\/\/blob\.gifcities\.org\/gifcities\/[A-Z0-9]{20,}\.gif/gi)];
+  return [...new Set(matches.map(m => m[0]))].slice(0, pageSize);
+}
+
+async function runAll() {
+  if (running) return;
+  if (selected.size === 0) { setLog('<span class="err">Select at least one search term first.</span>'); return; }
+
+  running = true;
+  shouldStop = false;
+  allUrls = [];
+  urlsByTerm = {};
+  dupeCount = 0;
+  seenUrls.clear();
+  document.getElementById('results-area').innerHTML = '';
+  document.getElementById('run-btn').disabled = true;
+  document.getElementById('stop-btn').disabled = false;
+  document.getElementById('gallery-panel').style.display = 'none';
+
+  const terms = [...selected];
+  const perTerm = parseInt(document.getElementById('per-term').value);
+  const delay = parseInt(document.getElementById('delay').value);
+
+  for (let i = 0; i < terms.length; i++) {
+    if (shouldStop) break;
+    const term = terms[i];
+    setProg(i, terms.length, `fetching "${term}"`);
+    setLog(`<span class="info">[ ${i+1}/${terms.length} ]</span> Searching for <span style="color:var(--amber)">"${term}"</span>...`);
+
+    const urls = await fetchGifs(term, perTerm);
+    const proxyName = workingProxy !== null ? PROXIES[workingProxy].name : 'none';
+    const fresh = [];
+    for (const u of urls) {
+      if (seenUrls.has(u)) { dupeCount++; continue; }
+      seenUrls.add(u);
+      fresh.push(u);
+      allUrls.push(u);
+    }
+
+    urlsByTerm[term] = fresh;
+    if (fresh.length === 0) {
+      setLog(`<span class="err">[ ${i+1}/${terms.length} ]</span> "${term}" — 0 results via ${proxyName}. Proxy may be down or term returned nothing.`);
+    } else {
+      setLog(`<span class="ok">[ ${i+1}/${terms.length} ]</span> "${term}" → <span style="color:var(--green)">${fresh.length} URLs</span> via <span style="color:var(--amber)">${proxyName}</span>`);
+    }
+
+    // Append to results area
+    if (fresh.length > 0) {
+      const box = document.getElementById('results-area');
+      const hdr = document.createElement('div');
+      hdr.className = 'term-header';
+      hdr.textContent = `── ${term} (${fresh.length} found) ──`;
+      box.appendChild(hdr);
+      fresh.forEach(u => {
+        const a = document.createElement('a');
+        a.href = u;
+        a.target = '_blank';
+        a.textContent = u;
+        const line = document.createElement('div');
+        line.appendChild(a);
+        box.appendChild(line);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    updateStats();
+    if (i < terms.length - 1 && !shouldStop) await sleep(delay);
+  }
+
+  running = false;
+  shouldStop = false;
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('stop-btn').disabled = true;
+  setProg(terms.length, terms.length, 'complete');
+  setLog(`<span class="ok">✓ Done!</span> Collected <span style="color:var(--green);font-weight:bold">${allUrls.length}</span> unique GIF URLs across <span style="color:var(--amber)">${Object.keys(urlsByTerm).length}</span> terms.`);
+  updateStats();
+}
+
+function stopRun() {
+  shouldStop = true;
+  document.getElementById('stop-btn').disabled = true;
+  setLog('<span class="err">Stopping after current term...</span>');
+}
+
+function clearAll() {
+  allUrls = [];
+  urlsByTerm = {};
+  dupeCount = 0;
+  seenUrls.clear();
+  document.getElementById('results-area').innerHTML = '<span style="color:var(--text-dim);font-size:11px">URLs will appear here as they are fetched...</span>';
+  document.getElementById('gallery-panel').style.display = 'none';
+  document.getElementById('gallery').innerHTML = '';
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('prog-pct').textContent = '0%';
+  document.getElementById('s-progress').textContent = '0/0';
+  document.getElementById('prog-label').innerHTML = 'Idle<span class="blink">_</span>';
+  setLog('<span class="info">Cleared.</span>');
+  updateStats();
+}
+
+function downloadTXT() {
+  if (!allUrls.length) return;
+  dl(allUrls.join('\n'), 'gifcities_urls.txt', 'text/plain');
+}
+
+function downloadCSV() {
+  if (!allUrls.length) return;
+  const rows = ['category,search_term,url,filename'];
+  for (const [term, urls] of Object.entries(urlsByTerm)) {
+    const cat = getCat(term);
+    urls.forEach(u => rows.push(`${cat},${term},${u},${u.split('/').pop()}`));
+  }
+  dl(rows.join('\n'), 'gifcities_urls.csv', 'text/csv');
+}
+
+function copyAll() {
+  if (!allUrls.length) { setLog('<span class="err">Nothing to copy yet.</span>'); return; }
+  navigator.clipboard.writeText(allUrls.join('\n')).then(() => {
+    setLog(`<span class="ok">✓ Copied ${allUrls.length} URLs to clipboard.</span>`);
+  });
+}
+
+function previewGallery() {
+  if (!allUrls.length) { setLog('<span class="err">No URLs to preview yet.</span>'); return; }
+  const panel = document.getElementById('gallery-panel');
+  const gallery = document.getElementById('gallery');
+  panel.style.display = 'block';
+  gallery.innerHTML = '';
+  const preview = allUrls.slice(0, 60);
+  preview.forEach(url => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:#0f0f1a;border:1px solid #2a2a45;border-radius:3px;padding:4px;display:flex;align-items:center;justify-content:center;width:80px;height:80px;cursor:pointer;';
+    wrap.title = url;
+    wrap.onclick = () => window.open(url, '_blank');
+    const img = document.createElement('img');
+    img.src = url;
+    img.style.cssText = 'max-width:70px;max-height:70px;image-rendering:pixelated;';
+    img.onerror = () => { wrap.style.opacity='.3'; wrap.title='Failed to load'; };
+    wrap.appendChild(img);
+    gallery.appendChild(wrap);
+  });
+  panel.scrollIntoView({ behavior: 'smooth' });
+}
+
+function getCat(term) {
+  for (const [cat, terms] of Object.entries(CATEGORIES)) {
+    if (terms.includes(term)) return cat;
+  }
+  return 'custom';
+}
+
+function dl(content, filename, mime) {
+  const a = document.createElement('a');
+  a.href = 'data:' + mime + ';charset=utf-8,' + encodeURIComponent(content);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 100);
+}
+
+let zipCancelled = false;
+
+function cancelZip() {
+  zipCancelled = true;
+  document.getElementById('zip-cancel-btn').textContent = 'Cancelling...';
+  document.getElementById('zip-cancel-btn').disabled = true;
+}
+
+function showZipModal(total) {
+  zipCancelled = false;
+  const m = document.getElementById('zip-modal');
+  m.style.display = 'flex';
+  document.getElementById('zip-total').textContent = total;
+  document.getElementById('zip-done').textContent = '0';
+  document.getElementById('zip-fail').textContent = '0';
+  document.getElementById('zip-fill').style.width = '0%';
+  document.getElementById('zip-pct').textContent = '0%';
+  document.getElementById('zip-label').textContent = 'Starting...';
+  document.getElementById('zip-current').textContent = '';
+  document.getElementById('zip-cancel-btn').textContent = '✕ Cancel';
+  document.getElementById('zip-cancel-btn').disabled = false;
+}
+
+function hideZipModal() {
+  document.getElementById('zip-modal').style.display = 'none';
+}
+
+function updateZipProgress(done, failed, total, currentUrl) {
+  const pct = Math.round(((done + failed) / total) * 100);
+  document.getElementById('zip-fill').style.width = pct + '%';
+  document.getElementById('zip-pct').textContent = pct + '%';
+  document.getElementById('zip-done').textContent = done;
+  document.getElementById('zip-fail').textContent = failed;
+  document.getElementById('zip-label').textContent = `Fetching ${done + failed + 1} of ${total}...`;
+  document.getElementById('zip-current').textContent = currentUrl.split('/').pop();
+}
+
+async function fetchGifBytes(url) {
+  for (const proxy of PROXIES) {
+    try {
+      const proxyUrl = proxy.fn(url);
+      const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength > 100) return buf; // sanity check
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+async function downloadZip() {
+  if (!allUrls.length) { setLog('<span class="err">No URLs collected yet — run a search first.</span>'); return; }
+
+  const total = allUrls.length;
+  showZipModal(total);
+
+  const zip = new JSZip();
+  const folder = zip.folder('gifcities');
+  let done = 0, failed = 0;
+  const seen = {};
+
+  for (let i = 0; i < allUrls.length; i++) {
+    if (zipCancelled) break;
+    const url = allUrls[i];
+    updateZipProgress(done, failed, total, url);
+
+    const bytes = await fetchGifBytes(url);
+    if (bytes) {
+      // Build unique filename: term__originalname.gif
+      let name = url.split('/').pop();
+      if (seen[name]) { seen[name]++; name = name.replace('.gif', `_${seen[name]}.gif`); }
+      else seen[name] = 1;
+      folder.file(name, bytes);
+      done++;
+    } else {
+      failed++;
+    }
+    await sleep(150);
+  }
+
+  if (done === 0) {
+    hideZipModal();
+    setLog('<span class="err">All GIF downloads failed — proxy may be blocking binary responses.</span>');
+    return;
+  }
+
+  document.getElementById('zip-label').textContent = `Packing ${done} GIFs into zip...`;
+  document.getElementById('zip-current').textContent = 'Please wait...';
+
+  try {
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'gifcities_gifs.zip';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 1000);
+    hideZipModal();
+    setLog(`<span class="ok">✓ ZIP downloaded!</span> ${done} GIFs packed · ${failed} failed · <span style="color:var(--amber)">gifcities_gifs.zip</span>`);
+  } catch(e) {
+    hideZipModal();
+    setLog(`<span class="err">ZIP generation failed: ${e.message}</span>`);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+buildTags();
+</script>
+</body>
+</html>
